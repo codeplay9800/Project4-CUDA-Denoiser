@@ -120,6 +120,7 @@ __global__ void gbufferToPBO_Normals(uchar4* pbo, glm::ivec2 resolution, GBuffer
 	}
 }
 
+
 __global__ void gbufferToPBO_Position(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer) {
 	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -127,7 +128,7 @@ __global__ void gbufferToPBO_Position(uchar4* pbo, glm::ivec2 resolution, GBuffe
 	if (x < resolution.x && y < resolution.y) {
 		int index = x + (y * resolution.x);
 
-		glm::vec3 position = glm::abs(gBuffer[index].position) ;
+		glm::vec3 position = glm::abs(gBuffer[index].position);
 		glm::ivec3 color;
 		color.x = glm::clamp((int)(position.x * 20.0), 0, 255);
 		color.y = glm::clamp((int)(position.y * 20.0), 0, 255);
@@ -148,6 +149,7 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static GBufferPixel* dev_gBuffer = NULL;
+static Camera* dev_Camera = NULL;
 // TODO: static variables for device memory, any extra info you need, etc
 // ...
 static float* dev_gausKernel = NULL;
@@ -194,6 +196,9 @@ void pathtraceInit(Scene* scene,float *gausKernel) {
 
 	// TODO: initialize any extra device memeory you need
 
+	cudaMalloc(&dev_Camera, sizeof(Camera));
+	cudaMemcpy(dev_Camera, &(hst_scene->state.camera), sizeof(Camera), cudaMemcpyHostToDevice);
+
 	cudaMalloc(&dev_gausKernel,  25 * sizeof(float));
 	cudaMemcpy(dev_gausKernel, gaussianKernel, 25 * sizeof(float), cudaMemcpyHostToDevice);
 
@@ -223,6 +228,7 @@ void pathtraceFree() {
 	cudaFree(dev_offsetKernel);
 	cudaFree(dev_TrousImage);
 	cudaFree(dev_pingPongImage);
+	cudaFree(dev_Camera);
 	checkCUDAError("pathtraceFree");
 }
 
@@ -293,6 +299,140 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 				}
 			}
 			dev_TrousImage[index] = currColor;
+		}
+
+	}
+
+	//__device__	glm::vec3 getPositionFromDepth(glm::vec3 position, glm::vec3 lookAt, glm::vec3 view,
+	//	glm::vec3 up, glm::vec2 pixelLength, GBufferPixel& devGbuf, int pixelPositionX
+	//	, int pixelPositionY)
+
+	__device__	glm::vec3 getPositionFromDepth(const Camera *devCam, GBufferPixel &devGbuf, int pixelPositionX
+		, int pixelPositionY)
+	{
+		glm::vec3 position = devCam->position;
+		glm::vec3 direction = glm::normalize(devCam->view
+			- devCam->right * devCam->pixelLength.x * ((float)pixelPositionX - (float)devCam->resolution.x * 0.5f)
+			- devCam->up * devCam->pixelLength.y * ((float)pixelPositionY - (float)devCam->resolution.y * 0.5f)
+		);
+		if (devGbuf.t != -1)
+		{
+			devGbuf.t = devGbuf.t;
+		}
+		glm::vec3 finalPos = devCam->position + (devGbuf.t - .0001f) * glm::normalize(direction);
+		return finalPos;
+	}
+
+
+	__global__ void gbufferToPBO_Position_Optimised(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer, const Camera *devCam) {
+		int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+		int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+
+		if (x < resolution.x && y < resolution.y) {
+			int index = x + (y * resolution.x);
+
+			glm::vec3 position = glm::abs(getPositionFromDepth(devCam, gBuffer[index], x, y));
+			glm::ivec3 color;
+			color.x = glm::clamp((int)(position.x * 20.0), 0, 255);
+			color.y = glm::clamp((int)(position.y * 20.0), 0, 255);
+			color.z = glm::clamp((int)(position.z * 20.0), 0, 255);
+
+			pbo[index].w = 0;
+			pbo[index].x = color.x;
+			pbo[index].y = color.y;
+			pbo[index].z = color.z;
+		}
+	}
+
+
+	/// <summary>
+	/// This A Trous Kernel performs conversion from 1D index to 2D.
+	/// </summary>
+	/// <param name="pixelCount"></param>
+	/// <param name="stepWidth"></param>
+	/// <param name="dev_gausKernel"></param>
+	/// <param name="dev_offsetKernel"></param>
+	/// <param name="dev_colorImage"></param>
+	/// <param name="dev_TrousImage"></param>
+	/// <param name="gbuf"></param>
+	/// <param name="resolutionX"></param>
+	/// <param name="resolutionY"></param>
+	/// <param name="ui_colorWeight"></param>
+	/// <param name="ui_normalWeight"></param>
+	/// <param name="ui_positionWeight"></param>
+	/// <returns></returns>
+	__global__ void GenerateAtrousImageOptimised(const Camera *devCam,
+		int pixelCount, int stepWidth,
+		float* dev_gausKernel, glm::vec2* dev_offsetKernel,
+		glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage,
+		GBufferPixel* gbuf, int resolutionX, int resolutionY, float ui_colorWeight,
+		float ui_normalWeight, float ui_positionWeight
+	)
+	{
+
+		int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+		if (index < pixelCount)
+		{
+
+			// Calculate Original  Index
+			int index2D_y = index / resolutionX;
+			int index2D_x = (int)(index % resolutionX);
+
+
+			glm::vec3 sum = glm::vec3(0.0f);
+			glm::vec3 cval = dev_colorImage[index];
+			glm::vec3 nval = gbuf[index].normal;
+			glm::vec3 pval = getPositionFromDepth(devCam, gbuf[index], index2D_x, index2D_y);
+
+			float cphi = ui_colorWeight * ui_colorWeight;
+			float nphi = ui_normalWeight * ui_normalWeight;
+			float pphi = ui_positionWeight * ui_positionWeight;
+
+			float cum_w = 0.0f;
+			for (int i = 0; i < 25; i++)
+			{
+				//Calculate offset Index
+				int offsetX = dev_offsetKernel[i].x;
+				int offsetY = dev_offsetKernel[i].y;
+
+				int finalValue_X = index2D_x + offsetX * stepWidth; // Final Offset Values
+				int finalValue_Y = index2D_y + offsetY * stepWidth; // Final Offset Values
+				if (finalValue_X >= 0 && finalValue_X <= (resolutionX - 1) && finalValue_Y >= 0 && finalValue_Y <= (resolutionY - 1))
+				{
+					int offsetColorIdx = finalValue_Y * resolutionX + finalValue_X;
+					if (offsetColorIdx >= 0 && offsetColorIdx < pixelCount)
+					{
+						glm::vec3 ctmp = dev_colorImage[offsetColorIdx];
+						glm::vec3 t = cval - ctmp;
+						float dist2 = glm::dot(t, t);
+						float c_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
+
+						glm::vec3 ntmp = gbuf[offsetColorIdx].normal;
+						t = nval - ntmp;
+						dist2 = glm::max(glm::dot(t, t) / (stepWidth * stepWidth), 0.0f);
+						float n_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
+
+						glm::vec3 ptmp = gbuf[offsetColorIdx].position;
+						t = pval - ptmp;
+						dist2 = glm::dot(t, t);
+						float p_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
+						float weight = c_w * n_w * p_w;
+
+						sum += ctmp * weight * dev_gausKernel[i];
+						cum_w += weight * dev_gausKernel[i];
+
+					}
+				}
+			}
+			if (cum_w == 0.f)
+			{
+				dev_TrousImage[index] = cval;
+				return;
+			}
+
+			dev_TrousImage[index] = sum / cum_w;
+
 		}
 
 	}
@@ -603,6 +743,22 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		}
 	}
 
+
+	__global__ void generateGBufferOptimised(
+		int num_paths,
+		ShadeableIntersection* shadeableIntersections,
+		PathSegment* pathSegments,
+		GBufferPixel* gBuffer) {
+		int idx = blockIdx.x * blockDim.x + threadIdx.x;
+		if (idx < num_paths)
+		{
+			int pixelPosition = pathSegments[idx].pixelIndex;
+			gBuffer[idx].t = shadeableIntersections[idx].t;
+			gBuffer[idx].normal = shadeableIntersections[idx].surfaceNormal;
+			//gBuffer[idx].position = getPointOnRay(pathSegments[idx].ray, shadeableIntersections[idx].t);
+		}
+	}
+
 	// Add the current iteration's output to the overall image
 	__global__ void finalGather(int nPaths, glm::vec3 * image, PathSegment * iterationPaths)
 	{
@@ -736,7 +892,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		// CHECKITOUT: process the gbuffer results and send them to OpenGL buffer for visualization
 		//gbufferToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
 		//gbufferToPBO_Normals<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
-		gbufferToPBO_Position <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+		//gbufferToPBO_Position <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+		gbufferToPBO_Position_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer, dev_Camera);
 	}
 
 	__global__ void GeneratePingPongImage(int pixelCount, glm::vec3* devImage, glm::vec3* pingPongImage, int iter)
@@ -781,9 +938,12 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 #endif
 
 #if ATrous1
-			// 1D block for path tracing
-			GenerateAtrousImage << <numblocksPathSegmentTracing, blockSize1d >> > (pixelCount, stepWidth, dev_gausKernel, dev_offsetKernel,
+
+			GenerateAtrousImageOptimised << <numblocksPathSegmentTracing, blockSize1d >> > (dev_Camera, pixelCount, stepWidth, dev_gausKernel, dev_offsetKernel,
 				dev_pingPongImage, dev_TrousImage, dev_gBuffer, resolutionX, resolutionY, colorWeight, norWeight, posWeight);
+			// 1D block for path tracing
+			/*GenerateAtrousImage << <numblocksPathSegmentTracing, blockSize1d >> > (pixelCount, stepWidth, dev_gausKernel, dev_offsetKernel,
+				dev_pingPongImage, dev_TrousImage, dev_gBuffer, resolutionX, resolutionY, colorWeight, norWeight, posWeight);*/
 #endif
 
 
