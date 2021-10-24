@@ -85,9 +85,9 @@ Denoiser	13.0652	13.157	13.265	13.59
 - UnOptimised Charts
 ![Performance  Analysis](img/Outputs/PathTracerandDenoiserUnoptimised.png)
 
-Trial #	1	2	3	4
-Path Tracer	87.6103	89.3156	90.134	90.9634
-Denoiser	9.5657	9.7115	9.7557	9.7799
+Trial #	1	2	3	4<br/>
+Path Tracer	87.6103	89.3156	90.134	90.9634<br/>
+Denoiser	9.5657	9.7115	9.7557	9.7799<br/>
 ### Comparing A-trous and Gaussian filtering
 
 - A-trous
