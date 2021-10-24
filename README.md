@@ -71,7 +71,7 @@ All the Images Use The Following Parameters
 ## Optimisations
 
 ### G-Buffer optimization
-- Opmitimising per-pixel positions and normals which are stored as glm::vec3s results in smaller storage buffers needed to store them and store access times to retreive the data.
+- Optimising per-pixel positions and normals which are stored as glm::vec3s results in smaller storage buffers size and access times. You can see the performance improvements from charts and numebrs below
 - - positions are now reconstructed based on pixel coordinates using an inverted projection matrix.
 - - Normals are compacted from glm::vec3 to glm::vec2 saving 4byte per float value stored.
 
