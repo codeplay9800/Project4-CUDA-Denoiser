@@ -14,13 +14,13 @@ In this project, I implemented a pathtracing denoiser based on "Edge-Avoiding A-
 
 ## Algorithm Overview
 - The input is a path-traced image,
-![Performance  Analysis](img/10iter.PNG)
+![Performance  Analysis](img/Outputs/10iter.PNG)
 
 - Normal buffer 
-![Performance  Analysis](img/Outputs/normals.PNG)
+![Performance  Analysis](img/normals.PNG)
 
 - Position buffer
-![Performance  Analysis](img/Outputs/positions.PNG)
+![Performance  Analysis](img/positions.PNG)
 
 The algorithm uses Gaussian filter with increasing step width for multiple iterations to get a denoised result.
 
