@@ -35,7 +35,7 @@ All the Images Use The Following Parameters
 
 ## Reference Image (1000 Iterations) 
  
-##10 Iterations 
+## 10 Iterations 
 - Reference
 ![Performance  Analysis](img/Outputs/10iter.PNG)
 
