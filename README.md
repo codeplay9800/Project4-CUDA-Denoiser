@@ -78,16 +78,16 @@ All the Images Use The Following Parameters
 - Optimised Charts
 ![Performance  Analysis](img/Outputs/PathTracerandDenoiser.png)
 
-Trial #	1	2	3	4
-Path Tracer	80.135	82.127	84.653	85.317
-Denoiser	13.0652	13.157	13.265	13.59
+Trial #	1	2	3	4<br/>
+Path Tracer	80.135ms	82.127ms	84.653ms	85.317ms<br/>
+Denoiser	13.0652ms	13.157ms	13.265ms	13.59ms<br/>
 
 - UnOptimised Charts
 ![Performance  Analysis](img/Outputs/PathTracerandDenoiserUnoptimised.png)
 
 Trial #	1	2	3	4<br/>
-Path Tracer	87.6103	89.3156	90.134	90.9634<br/>
-Denoiser	9.5657	9.7115	9.7557	9.7799<br/>
+Path Tracer	87.6103ms	89.3156ms	90.134ms	90.9634ms<br/>
+Denoiser	9.5657ms	9.7115ms	9.7557ms	9.7799ms<br/>
 ### Comparing A-trous and Gaussian filtering
 
 - A-trous
