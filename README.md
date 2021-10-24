@@ -34,21 +34,20 @@ All the Images Use The Following Parameters
 - Position Weight = 0.700
 
 ## Reference Image (1000 Iterations) 
-//Image 
 
 ##10 Iterations 
 - Reference
-![Performance  Analysis](img/Outputs/10iter.png)
+![Performance  Analysis](img/Outputs/10iter.PNG)
 
 - Denoised
-![Performance  Analysis](img/Outputs/denoised.png)
+![Performance  Analysis](img/Outputs/denoised.PNG)
 
 ## 2 Iterations
 - Reference
-![Performance  Analysis](img/Outputs/2iter.png)
+![Performance  Analysis](img/Outputs/2iter.PNG)
 
 - Denoised
-![Performance  Analysis](img/Outputs/denoised2.png)
+![Performance  Analysis](img/Outputs/denoised2.PNG)
 
 ## Performance Numbers
 
@@ -61,7 +60,7 @@ All the Images Use The Following Parameters
 ### Denoiser vs Filter Size
 ![Performance  Analysis](img/Outputs/DenoiseTimevsFilterSize.png)
 
-###Notable Findings
+### Notable Findings
 - How visual results vary with filter size.
 -   - In my Findings the visual results do not change linearly with filter size. As the filter size increase the difference in results become less percieveable 
 
