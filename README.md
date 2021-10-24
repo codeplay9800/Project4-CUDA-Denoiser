@@ -51,10 +51,23 @@ All the Images Use The Following Parameters
 
 ## Performance Numbers
 
+
 ### Cost Denoiser vs Path Trace
+
+- Filter Size = 80
+- Color Weight = 8.1000
+- Normal Weight = 0.350
+- Position Weight = 0.700
+
 ![Performance  Analysis](img/Outputs/PathTracerandDenoiser.png)
 
 ### Denoiser vs Resolution
+
+- Filter Size = 80
+- Color Weight = 8.1000
+- Normal Weight = 0.350
+- Position Weight = 0.700
+
 ![Performance  Analysis](img/Outputs/DenoiseTimevsResolution.png)
 
 This demonstrates that the average time increases linearly with the number of pixels in the image. 
