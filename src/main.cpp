@@ -52,7 +52,7 @@ static float timeDenoise;
 static bool  hasPrinted;
 using StreamCompaction::Common::PerformanceTimer;
 
-#define Timer 0;
+#define Timer 1;
 PerformanceTimer& timer()
 {
     static PerformanceTimer timer;
@@ -202,6 +202,8 @@ void runCuda() {
     if (iteration < ui_iterations) {
         iteration++;
 
+//Timer for a single iteration
+
 #if Timer
         // Start Timer
         if (iteration == 1)
@@ -209,12 +211,20 @@ void runCuda() {
             timePT = 0.f;
         }
         timer().startCpuTimer();
-#endif // TIMER
+#endif
 
 
         // execute the kernel
         int frame = 0;
         pathtrace(frame, iteration); 
+
+#if Timer
+        timer().endCpuTimer();
+        timePT += timer().getCpuElapsedTimeForPreviousOperation();
+        if (iteration == ui_iterations) {
+            std::cout << "PT time for " << iteration << " iterations: " << timePT << "ms" << std::endl;
+        }
+#endif 
     }
 
     if (ui_showGbuffer) {
@@ -224,8 +234,20 @@ void runCuda() {
     {
         if (!imageDenoised)
         {
+#if Timer
+            // Start Timer
+           
+            timeDenoise = 0.f;
+            timer().startCpuTimer();
+#endif
+
             imageDenoised = DenoiseImage(renderState->camera.resolution.x, renderState->camera.resolution.y, iteration, ui_filterSize,
                 ui_colorWeight, ui_normalWeight, ui_positionWeight);
+#if Timer
+            timer().endCpuTimer();
+            timeDenoise += timer().getCpuElapsedTimeForPreviousOperation();
+                std::cout << "Denoise time "<< timeDenoise << "ms" << std::endl;
+#endif 
         }
         showDenoise(pbo_dptr, iteration);
     }

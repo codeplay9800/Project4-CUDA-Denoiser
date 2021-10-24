@@ -21,6 +21,8 @@
 #define SimpleGaussianDenoise 0
 #define ATrous1 1
 #define ATrous2 0
+#define G_BufNormal 0
+#define G_BufPosition 1
 
 
 
@@ -867,9 +869,13 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 		// CHECKITOUT: process the gbuffer results and send them to OpenGL buffer for visualization
 		//gbufferToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
-		//gbufferToPBO_Normals_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+#if G_BufNormal
+		gbufferToPBO_Normals_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+#endif
 		//gbufferToPBO_Position <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+#if G_BufPosition
 		gbufferToPBO_Position_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer, dev_Camera);
+#endif
 	}
 
 	__global__ void GeneratePingPongImage(int pixelCount, glm::vec3* devImage, glm::vec3* pingPongImage, int iter)
