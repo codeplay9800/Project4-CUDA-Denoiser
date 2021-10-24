@@ -75,7 +75,19 @@ All the Images Use The Following Parameters
 - - positions are now reconstructed based on pixel coordinates using an inverted projection matrix.
 - - Normals are compacted from glm::vec3 to glm::vec2 saving 4byte per float value stored.
 
+- Optimised Charts
+![Performance  Analysis](img/Outputs/PathTracerandDenoiser.png)
 
+Trial #	1	2	3	4
+Path Tracer	80.135	82.127	84.653	85.317
+Denoiser	13.0652	13.157	13.265	13.59
+
+- UnOptimised Charts
+![Performance  Analysis](img/Outputs/PathTracerandDenoiserUnoptimised.png)
+
+Trial #	1	2	3	4
+Path Tracer	87.6103	89.3156	90.134	90.9634
+Denoiser	9.5657	9.7115	9.7557	9.7799
 ### Comparing A-trous and Gaussian filtering
 
 - A-trous
@@ -89,4 +101,3 @@ All the Images Use The Following Parameters
 | 25 |  8.5991	 |  1.3322 |
 | 80 |  13.590	 | 3.1142  |
 
-================
