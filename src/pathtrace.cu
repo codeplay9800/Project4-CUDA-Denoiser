@@ -100,25 +100,25 @@ __global__ void gbufferToPBO(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* g
 	}
 }
 
-__global__ void gbufferToPBO_Normals(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer) {
-	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
-	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
-
-	if (x < resolution.x && y < resolution.y) {
-		int index = x + (y * resolution.x);
-
-		glm::vec3 normal = glm::abs(gBuffer[index].normal);
-		glm::ivec3 color;
-		color.x = glm::clamp((int)(normal.x * 255.0), 0, 255);
-		color.y = glm::clamp((int)(normal.y * 255.0), 0, 255);
-		color.z = glm::clamp((int)(normal.z * 255.0), 0, 255);
-
-		pbo[index].w = 0;
-		pbo[index].x = color.x;
-		pbo[index].y = color.y;
-		pbo[index].z = color.z;
-	}
-}
+//__global__ void gbufferToPBO_Normals(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer) {
+//	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+//	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+//
+//	if (x < resolution.x && y < resolution.y) {
+//		int index = x + (y * resolution.x);
+//
+//		glm::vec3 normal = glm::abs(gBuffer[index].normal);
+//		glm::ivec3 color;
+//		color.x = glm::clamp((int)(normal.x * 255.0), 0, 255);
+//		color.y = glm::clamp((int)(normal.y * 255.0), 0, 255);
+//		color.z = glm::clamp((int)(normal.z * 255.0), 0, 255);
+//
+//		pbo[index].w = 0;
+//		pbo[index].x = color.x;
+//		pbo[index].y = color.y;
+//		pbo[index].z = color.z;
+//	}
+//}
 
 
 __global__ void gbufferToPBO_Position(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer) {
@@ -303,26 +303,90 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 	}
 
+
+
+	__device__ glm::vec2 signNotZero(glm::vec2 v) {
+		return glm::vec2((v.x >= 0.0) ? +1.0 : -1.0, (v.y >= 0.0) ? +1.0 : -1.0);
+	}
+
+
+	__device__  glm::vec3 oct_to_float32x3(glm::vec2 e) {
+
+		if (e.x == -2 || e.y == -2)
+		{
+			return glm::vec3(0, 0, 0);
+		}
+		glm::vec3 v = glm::vec3(glm::vec2(e.x, e.y), 1.0 - abs(e.x) - abs(e.y));
+		if (v.z < 0)
+		{
+			glm::vec2 mid = (1.0f - abs(glm::vec2(v.y, v.x))) * signNotZero(glm::vec2(v.x, v.y));
+
+			v.x = mid.x;
+			v.y = mid.y;
+		}
+		return normalize(v);
+	}
+
+	/// <summary>
+	/// I haven't fully understood it yet
+	/// </summary>
+	/// <param name="normal"></param>
+	/// <returns></returns>
+	__device__ glm::vec2 float32x3_to_Oct(glm::vec3 normal)
+	{
+
+		// this value is for non defined value custom
+		if (abs(normal.x) == 0.f && abs(normal.y) == 0.0f && abs(normal.z) == 0.f)
+		{
+			return glm::vec2(-2, -2);
+		}
+
+
+		// Project the sphere onto the octahedron, and then onto the xy plane
+		glm::vec2 p = glm::vec2(normal.x, normal.y) * (1.0f / (abs(normal.x) + abs(normal.y) + abs(normal.z)));
+		// Reflect the folds of the lower hemisphere over the diagonals
+		return (normal.z <= 0.0) ? ((1.0f - abs(glm::vec2(p.y, p.x))) * signNotZero(p) ) : p;
+	}
+
 	//__device__	glm::vec3 getPositionFromDepth(glm::vec3 position, glm::vec3 lookAt, glm::vec3 view,
 	//	glm::vec3 up, glm::vec2 pixelLength, GBufferPixel& devGbuf, int pixelPositionX
 	//	, int pixelPositionY)
 
-	__device__	glm::vec3 getPositionFromDepth(const Camera *devCam, GBufferPixel &devGbuf, int pixelPositionX
+	__device__	glm::vec3 getPositionFromDepth(const Camera *devCam, const GBufferPixel &devGbuf, int pixelPositionX
 		, int pixelPositionY)
 	{
-		glm::vec3 position = devCam->position;
+		if (devGbuf.t == -1.f)
+		{
+			return glm::vec3(0, 0, 0);
+		}
 		glm::vec3 direction = glm::normalize(devCam->view
 			- devCam->right * devCam->pixelLength.x * ((float)pixelPositionX - (float)devCam->resolution.x * 0.5f)
 			- devCam->up * devCam->pixelLength.y * ((float)pixelPositionY - (float)devCam->resolution.y * 0.5f)
 		);
-		if (devGbuf.t != -1)
-		{
-			devGbuf.t = devGbuf.t;
-		}
 		glm::vec3 finalPos = devCam->position + (devGbuf.t - .0001f) * glm::normalize(direction);
 		return finalPos;
 	}
 
+	__global__ void gbufferToPBO_Normals_Optimised(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer) {
+		int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+		int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+
+		if (x < resolution.x && y < resolution.y) {
+			int index = x + (y * resolution.x);
+
+			glm::vec3 normal = glm::abs(oct_to_float32x3( gBuffer[index].normal));
+			//glm::vec3 normal = gBuffer[index].normal;
+			glm::ivec3 color;
+			color.x = glm::clamp((int)(normal.x * 255.0), 0, 255);
+			color.y = glm::clamp((int)(normal.y * 255.0), 0, 255);
+			color.z = glm::clamp((int)(normal.z * 255.0), 0, 255);
+
+			pbo[index].w = 0;
+			pbo[index].x = color.x;
+			pbo[index].y = color.y;
+			pbo[index].z = color.z;
+		}
+	}
 
 	__global__ void gbufferToPBO_Position_Optimised(uchar4* pbo, glm::ivec2 resolution, GBufferPixel* gBuffer, const Camera *devCam) {
 		int x = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -364,7 +428,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 	__global__ void GenerateAtrousImageOptimised(const Camera *devCam,
 		int pixelCount, int stepWidth,
 		float* dev_gausKernel, glm::vec2* dev_offsetKernel,
-		glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage,
+		glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage, const
 		GBufferPixel* gbuf, int resolutionX, int resolutionY, float ui_colorWeight,
 		float ui_normalWeight, float ui_positionWeight
 	)
@@ -382,7 +446,10 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 			glm::vec3 sum = glm::vec3(0.0f);
 			glm::vec3 cval = dev_colorImage[index];
-			glm::vec3 nval = gbuf[index].normal;
+			//glm::vec3 nval = gbuf[index].normal;
+			glm::vec3 nval = oct_to_float32x3(gbuf[index].normal);
+
+			//The oct_to_float32x3 can return nan values for normal ( 0, 0, 0) which in theory shouldn't exist
 			glm::vec3 pval = getPositionFromDepth(devCam, gbuf[index], index2D_x, index2D_y);
 
 			float cphi = ui_colorWeight * ui_colorWeight;
@@ -408,7 +475,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 						float dist2 = glm::dot(t, t);
 						float c_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
 
-						glm::vec3 ntmp = gbuf[offsetColorIdx].normal;
+						glm::vec3 ntmp = oct_to_float32x3( gbuf[offsetColorIdx].normal);
+						//glm::vec3 ntmp = gbuf[offsetColorIdx].normal;
 						t = nval - ntmp;
 						dist2 = glm::max(glm::dot(t, t) / (stepWidth * stepWidth), 0.0f);
 						float n_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
@@ -437,182 +505,183 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 	}
 
-	/// <summary>
-	/// This A Trous Kernel performs conversion from 1D index to 2D.
-	/// </summary>
-	/// <param name="pixelCount"></param>
-	/// <param name="stepWidth"></param>
-	/// <param name="dev_gausKernel"></param>
-	/// <param name="dev_offsetKernel"></param>
-	/// <param name="dev_colorImage"></param>
-	/// <param name="dev_TrousImage"></param>
-	/// <param name="gbuf"></param>
-	/// <param name="resolutionX"></param>
-	/// <param name="resolutionY"></param>
-	/// <param name="ui_colorWeight"></param>
-	/// <param name="ui_normalWeight"></param>
-	/// <param name="ui_positionWeight"></param>
-	/// <returns></returns>
-	__global__ void GenerateAtrousImage(
-		int pixelCount, int stepWidth,
-		float* dev_gausKernel, glm::vec2* dev_offsetKernel,
-		glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage,
-		GBufferPixel* gbuf, int resolutionX, int resolutionY, float ui_colorWeight,
-		float ui_normalWeight, float ui_positionWeight
-	)
-	{
+	///// <summary>
+	///// This A Trous Kernel performs conversion from 1D index to 2D.
+	///// </summary>
+	///// <param name="pixelCount"></param>
+	///// <param name="stepWidth"></param>
+	///// <param name="dev_gausKernel"></param>
+	///// <param name="dev_offsetKernel"></param>
+	///// <param name="dev_colorImage"></param>
+	///// <param name="dev_TrousImage"></param>
+	///// <param name="gbuf"></param>
+	///// <param name="resolutionX"></param>
+	///// <param name="resolutionY"></param>
+	///// <param name="ui_colorWeight"></param>
+	///// <param name="ui_normalWeight"></param>
+	///// <param name="ui_positionWeight"></param>
+	///// <returns></returns>
+	//__global__ void GenerateAtrousImage(
+	//	int pixelCount, int stepWidth,
+	//	float* dev_gausKernel, glm::vec2* dev_offsetKernel,
+	//	glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage,
+	//	GBufferPixel* gbuf, int resolutionX, int resolutionY, float ui_colorWeight,
+	//	float ui_normalWeight, float ui_positionWeight
+	//)
+	//{
 
-		int index = blockIdx.x * blockDim.x + threadIdx.x;
+	//	int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-		if (index < pixelCount)
-		{
-			glm::vec3 sum = glm::vec3(0.0f);
-			glm::vec3 cval = dev_colorImage[index];
-			glm::vec3 nval = gbuf[index].normal;
-			glm::vec3 pval = gbuf[index].position;
+	//	if (index < pixelCount)
+	//	{
+	//		glm::vec3 sum = glm::vec3(0.0f);
+	//		glm::vec3 cval = dev_colorImage[index];
+	//		glm::vec2 nval1 = gbuf[index].normal;
+	//		glm::vec3 nval = oct_to_float32x3(nval1);
+	//		glm::vec3 pval = gbuf[index].position;
 
-			float cphi = ui_colorWeight * ui_colorWeight;
-			float nphi = ui_normalWeight * ui_normalWeight;
-			float pphi = ui_positionWeight * ui_positionWeight;
+	//		float cphi = ui_colorWeight * ui_colorWeight;
+	//		float nphi = ui_normalWeight * ui_normalWeight;
+	//		float pphi = ui_positionWeight * ui_positionWeight;
 
-			float cum_w = 0.0f;
-				for (int i = 0; i < 25; i++)
-				{
-					// Calculate Offseted Index
-					int index2D_y = index / resolutionX ;
-					int index2D_x = (int)(index % resolutionX);
+	//		float cum_w = 0.0f;
+	//			for (int i = 0; i < 25; i++)
+	//			{
+	//				// Calculate Offseted Index
+	//				int index2D_y = index / resolutionX ;
+	//				int index2D_x = (int)(index % resolutionX);
 
-					int offsetX = dev_offsetKernel[i].x;
-					int offsetY = dev_offsetKernel[i].y;
+	//				int offsetX = dev_offsetKernel[i].x;
+	//				int offsetY = dev_offsetKernel[i].y;
 
-					int finalValue_X = index2D_x + offsetX * stepWidth; // Final Offset Values
-					int finalValue_Y = index2D_y + offsetY * stepWidth; // Final Offset Values
-					if (finalValue_X >= 0 && finalValue_X <= (resolutionX - 1) && finalValue_Y >= 0 && finalValue_Y <= (resolutionY - 1))
-					{
-						int offsetColorIdx = finalValue_Y * resolutionX + finalValue_X;
-						if (offsetColorIdx >= 0 && offsetColorIdx < pixelCount)
-						{
-							glm::vec3 ctmp = dev_colorImage[offsetColorIdx];
-							glm::vec3 t = cval - ctmp;
-							float dist2 = glm::dot(t, t);
-							float c_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
+	//				int finalValue_X = index2D_x + offsetX * stepWidth; // Final Offset Values
+	//				int finalValue_Y = index2D_y + offsetY * stepWidth; // Final Offset Values
+	//				if (finalValue_X >= 0 && finalValue_X <= (resolutionX - 1) && finalValue_Y >= 0 && finalValue_Y <= (resolutionY - 1))
+	//				{
+	//					int offsetColorIdx = finalValue_Y * resolutionX + finalValue_X;
+	//					if (offsetColorIdx >= 0 && offsetColorIdx < pixelCount)
+	//					{
+	//						glm::vec3 ctmp = dev_colorImage[offsetColorIdx];
+	//						glm::vec3 t = cval - ctmp;
+	//						float dist2 = glm::dot(t, t);
+	//						float c_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
 
-							glm::vec3 ntmp = gbuf[offsetColorIdx].normal;
-							t = nval - ntmp;
-							dist2 = glm::max(glm::dot(t, t)/ (stepWidth * stepWidth), 0.0f);
-							float n_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
+	//						glm::vec3 ntmp = oct_to_float32x3(gbuf[offsetColorIdx].normal);
+	//						t = nval - ntmp;
+	//						dist2 = glm::max(glm::dot(t, t)/ (stepWidth * stepWidth), 0.0f);
+	//						float n_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
 
-							glm::vec3 ptmp = gbuf[offsetColorIdx].position;
-							t = pval - ptmp;
-							dist2 = glm::dot(t, t);
-							float p_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
-							float weight = c_w * n_w * p_w;
+	//						glm::vec3 ptmp = gbuf[offsetColorIdx].position;
+	//						t = pval - ptmp;
+	//						dist2 = glm::dot(t, t);
+	//						float p_w = glm::min(glm::exp(-(dist2) / cphi), 1.0f);
+	//						float weight = c_w * n_w * p_w;
 
-							sum += ctmp * weight * dev_gausKernel[i];
-							cum_w += weight * dev_gausKernel[i];
+	//						sum += ctmp * weight * dev_gausKernel[i];
+	//						cum_w += weight * dev_gausKernel[i];
 
-						}
-					}
-				}
-				if (cum_w == 0.f)
-				{
-					dev_TrousImage[index] = cval;
-					return;
-				}
-				
-				dev_TrousImage[index] = sum / cum_w;
-				
-		}
+	//					}
+	//				}
+	//			}
+	//			if (cum_w == 0.f)
+	//			{
+	//				dev_TrousImage[index] = cval;
+	//				return;
+	//			}
+	//			
+	//			dev_TrousImage[index] = sum / cum_w;
+	//			
+	//	}
 
-	}
+	//}
 	  
-	/// <summary>
-	/// This A Trous Kernel already starts out with 2D indexes
-	/// </summary>
-	/// <param name="pixelCount"></param>
-	/// <param name="stepWidth"></param>
-	/// <param name="dev_gausKernel"></param>
-	/// <param name="dev_offsetKernel"></param>
-	/// <param name="dev_colorImage"></param>
-	/// <param name="dev_TrousImage"></param>
-	/// <param name="gbuf"></param>
-	/// <param name="resolutionX"></param>
-	/// <param name="resolutionY"></param>
-	/// <param name="ui_colorWeight"></param>
-	/// <param name="ui_normalWeight"></param>
-	/// <param name="ui_positionWeight"></param>
-	/// <returns></returns>
-	__global__ void GenerateAtrousImageGeneral(
-		int pixelCount, int stepWidth,
-		float* dev_gausKernel, glm::vec2* dev_offsetKernel,
-		glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage,
-		GBufferPixel* gbuf, int resolutionX, int resolutionY, float ui_colorWeight,
-		float ui_normalWeight, float ui_positionWeight
-	)
-	{
+	///// <summary>
+	///// This A Trous Kernel already starts out with 2D indexes
+	///// </summary>
+	///// <param name="pixelCount"></param>
+	///// <param name="stepWidth"></param>
+	///// <param name="dev_gausKernel"></param>
+	///// <param name="dev_offsetKernel"></param>
+	///// <param name="dev_colorImage"></param>
+	///// <param name="dev_TrousImage"></param>
+	///// <param name="gbuf"></param>
+	///// <param name="resolutionX"></param>
+	///// <param name="resolutionY"></param>
+	///// <param name="ui_colorWeight"></param>
+	///// <param name="ui_normalWeight"></param>
+	///// <param name="ui_positionWeight"></param>
+	///// <returns></returns>
+	//__global__ void GenerateAtrousImageGeneral(
+	//	int pixelCount, int stepWidth,
+	//	float* dev_gausKernel, glm::vec2* dev_offsetKernel,
+	//	glm::vec3* dev_colorImage, glm::vec3* dev_TrousImage,
+	//	GBufferPixel* gbuf, int resolutionX, int resolutionY, float ui_colorWeight,
+	//	float ui_normalWeight, float ui_positionWeight
+	//)
+	//{
 
-		int x = (blockIdx.x * blockDim.x) + threadIdx.x;
-		int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+	//	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+	//	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 
-		if (x < resolutionX && y < resolutionY)
-		{
-			int index = x + (y * resolutionX);
-			glm::vec3 sum = glm::vec3(0.0f);
-			glm::vec3 cval = dev_colorImage[index];
-			glm::vec3 nval = gbuf[index].normal;
-			glm::vec3 pval = gbuf[index].position;
+	//	if (x < resolutionX && y < resolutionY)
+	//	{
+	//		int index = x + (y * resolutionX);
+	//		glm::vec3 sum = glm::vec3(0.0f);
+	//		glm::vec3 cval = dev_colorImage[index];
+	//		glm::vec3 nval = oct_to_float32x3(gbuf[index].normal);
+	//		glm::vec3 pval = gbuf[index].position;
 
-			float cphi = ui_colorWeight ;
-			float nphi = ui_normalWeight ;
-			float pphi = ui_positionWeight ;
+	//		float cphi = ui_colorWeight ;
+	//		float nphi = ui_normalWeight ;
+	//		float pphi = ui_positionWeight ;
 
-			float cum_w = 0.0f;
-				for (int i = 0; i < 5 * 5; i++)
-				{
-					// Calculate Offseted Index
+	//		float cum_w = 0.0f;
+	//			for (int i = 0; i < 5 * 5; i++)
+	//			{
+	//				// Calculate Offseted Index
 
-					int offsetX = dev_offsetKernel[i].x;
-					int offsetY = dev_offsetKernel[i].y;
+	//				int offsetX = dev_offsetKernel[i].x;
+	//				int offsetY = dev_offsetKernel[i].y;
 
-					int finalValue_X  = x + offsetX * stepWidth;
-					int finalValue_Y = y + offsetY * stepWidth;
-					if (finalValue_X >= 0 && finalValue_X <= (resolutionX - 1) && finalValue_Y >= 0 && finalValue_Y <= (resolutionY - 1))
-					{
-						int offsetColorIdx = finalValue_Y * resolutionX + finalValue_X;
-						if (offsetColorIdx >= 0 && offsetColorIdx < pixelCount)
-						{
-							glm::vec3 ctmp = dev_colorImage[offsetColorIdx];
-							glm::vec3 t = cval - ctmp;
-							float dist2 = glm::length(t) * glm::length(t);
-							float newVal = glm::exp(-(dist2) / cphi);
-							float c_w = glm::min(newVal, 1.0f);
+	//				int finalValue_X  = x + offsetX * stepWidth;
+	//				int finalValue_Y = y + offsetY * stepWidth;
+	//				if (finalValue_X >= 0 && finalValue_X <= (resolutionX - 1) && finalValue_Y >= 0 && finalValue_Y <= (resolutionY - 1))
+	//				{
+	//					int offsetColorIdx = finalValue_Y * resolutionX + finalValue_X;
+	//					if (offsetColorIdx >= 0 && offsetColorIdx < pixelCount)
+	//					{
+	//						glm::vec3 ctmp = dev_colorImage[offsetColorIdx];
+	//						glm::vec3 t = cval - ctmp;
+	//						float dist2 = glm::length(t) * glm::length(t);
+	//						float newVal = glm::exp(-(dist2) / cphi);
+	//						float c_w = glm::min(newVal, 1.0f);
 
-							glm::vec3 ntmp = gbuf[offsetColorIdx].normal;
-							t = nval - ntmp;
-							dist2 = glm::max( (glm::length(t) * glm::length(t)) / (stepWidth * stepWidth), 0.f);
-							newVal = glm::exp(-1 * (dist2) / nphi);
-							float n_w = glm::min(newVal, 1.0f);
+	//						glm::vec3 ntmp = oct_to_float32x3(gbuf[offsetColorIdx].normal);
+	//						t = nval - ntmp;
+	//						dist2 = glm::max( (glm::length(t) * glm::length(t)) / (stepWidth * stepWidth), 0.f);
+	//						newVal = glm::exp(-1 * (dist2) / nphi);
+	//						float n_w = glm::min(newVal, 1.0f);
 
-							glm::vec3 ptmp = gbuf[offsetColorIdx].position;
-							t = pval - ptmp;
-							dist2 = glm::length(t) * glm::length(t);
-							newVal = glm::exp(-1 * (dist2) / pphi);
-							float p_w = glm::min(newVal, 1.0f);
+	//						glm::vec3 ptmp = gbuf[offsetColorIdx].position;
+	//						t = pval - ptmp;
+	//						dist2 = glm::length(t) * glm::length(t);
+	//						newVal = glm::exp(-1 * (dist2) / pphi);
+	//						float p_w = glm::min(newVal, 1.0f);
 
 
-							float weight = c_w * n_w * p_w;
-							sum += ctmp * weight * dev_gausKernel[i];
-							cum_w += weight * dev_gausKernel[i];
+	//						float weight = c_w * n_w * p_w;
+	//						sum += ctmp * weight * dev_gausKernel[i];
+	//						cum_w += weight * dev_gausKernel[i];
 
-						}
-					}
-					
-				}
-			
-			dev_TrousImage[index] = sum / cum_w;
-		}
+	//					}
+	//				}
+	//				
+	//			}
+	//		
+	//		dev_TrousImage[index] = sum / cum_w;
+	//	}
 
-	}
+	//}
 
 	__global__ void computeIntersections(
 		int depth
@@ -728,20 +797,20 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		}
 	}
 
-	__global__ void generateGBuffer(
-		int num_paths,
-		ShadeableIntersection * shadeableIntersections,
-		PathSegment * pathSegments,
-		GBufferPixel * gBuffer) {
-		int idx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (idx < num_paths)
-		{
-			int pixelPosition = pathSegments[idx].pixelIndex;
-			gBuffer[idx].t = shadeableIntersections[idx].t;
-			gBuffer[idx].normal = shadeableIntersections[idx].surfaceNormal;
-			gBuffer[idx].position = getPointOnRay(pathSegments[idx].ray, shadeableIntersections[idx].t);
-		}
-	}
+	//__global__ void generateGBuffer(
+	//	int num_paths,
+	//	ShadeableIntersection * shadeableIntersections,
+	//	PathSegment * pathSegments,
+	//	GBufferPixel * gBuffer) {
+	//	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	//	if (idx < num_paths)
+	//	{
+	//		int pixelPosition = pathSegments[idx].pixelIndex;
+	//		gBuffer[idx].t = shadeableIntersections[idx].t;
+	//		gBuffer[idx].normal = shadeableIntersections[idx].surfaceNormal;
+	//		gBuffer[idx].position = getPointOnRay(pathSegments[idx].ray, shadeableIntersections[idx].t);
+	//	}
+	//}
 
 
 	__global__ void generateGBufferOptimised(
@@ -754,7 +823,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		{
 			int pixelPosition = pathSegments[idx].pixelIndex;
 			gBuffer[idx].t = shadeableIntersections[idx].t;
-			gBuffer[idx].normal = shadeableIntersections[idx].surfaceNormal;
+			gBuffer[idx].normal = float32x3_to_Oct( shadeableIntersections[idx].surfaceNormal);
+			//gBuffer[idx].normal = shadeableIntersections[idx].surfaceNormal;
 			//gBuffer[idx].position = getPointOnRay(pathSegments[idx].ray, shadeableIntersections[idx].t);
 		}
 	}
@@ -852,8 +922,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 			checkCUDAError("trace one bounce");
 			cudaDeviceSynchronize();
 
-			if (depth == 0) {
-				generateGBuffer << <numblocksPathSegmentTracing, blockSize1d >> > (num_paths, dev_intersections, dev_paths, dev_gBuffer);
+			if (depth == 0 && iter ==1) {
+				generateGBufferOptimised << <numblocksPathSegmentTracing, blockSize1d >> > (num_paths, dev_intersections, dev_paths, dev_gBuffer);
 			}
 
 			depth++;
@@ -891,9 +961,9 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 		// CHECKITOUT: process the gbuffer results and send them to OpenGL buffer for visualization
 		//gbufferToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
-		//gbufferToPBO_Normals<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+		gbufferToPBO_Normals_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
 		//gbufferToPBO_Position <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
-		gbufferToPBO_Position_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer, dev_Camera);
+		//gbufferToPBO_Position_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer, dev_Camera);
 	}
 
 	__global__ void GeneratePingPongImage(int pixelCount, glm::vec3* devImage, glm::vec3* pingPongImage, int iter)
