@@ -17,10 +17,10 @@ In this project, I implemented a pathtracing denoiser based on "Edge-Avoiding A-
 ![Performance  Analysis](img/Outputs/10iter.PNG)
 
 - Normal buffer 
-![Performance  Analysis](img/normals.PNG)
+![Performance  Analysis](img/normals.png)
 
 - Position buffer
-![Performance  Analysis](img/positions.PNG)
+![Performance  Analysis](img/positions.png)
 
 The algorithm uses Gaussian filter with increasing step width for multiple iterations to get a denoised result.
 
@@ -38,17 +38,17 @@ All the Images Use The Following Parameters
 
 ##10 Iterations 
 - Reference
+![Performance  Analysis](img/Outputs/10iter.png)
 
 - Denoised
+![Performance  Analysis](img/Outputs/denoised.png)
 
 ## 2 Iterations
 - Reference
+![Performance  Analysis](img/Outputs/2iter.png)
 
 - Denoised
-
-
-# Simple Gussian Blur 
-//Image
+![Performance  Analysis](img/Outputs/denoised2.png)
 
 ## Performance Numbers
 
@@ -70,6 +70,7 @@ All the Images Use The Following Parameters
 
 
 ## Optimisations
+
 ### G-Buffer optimization
 - Opmitimising per-pixel positions and normals which are stored as glm::vec3s results in smaller storage buffers needed to store them and store access times to retreive the data.
 - - positions are now reconstructed based on pixel coordinates using an inverted projection matrix.
@@ -77,6 +78,13 @@ All the Images Use The Following Parameters
 
 
 ### Comparing A-trous and Gaussian filtering
+
+- A-trous
+![Performance  Analysis](img/Outputs/denoised.png)
+
+- Simple Gussian Blur 
+![Performance  Analysis](img/Outputs/Gaussian.png)
+
 | Filter Size | A Trous   |  Simple Gaussian | 
 |---|---|---|
 | 25 |  8.5991	 |  1.3322 |
