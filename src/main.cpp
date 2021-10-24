@@ -1,7 +1,7 @@
 #include "main.h"
 #include "preview.h"
 #include <cstring>
-
+#include "common.h"
 #include "../imgui/imgui.h"
 #include "../imgui/imgui_impl_glfw.h"
 #include "../imgui/imgui_impl_opengl3.h"
@@ -45,6 +45,19 @@ int iteration;
 
 int width;
 int height;
+
+
+static float timePT;
+static float timeDenoise;
+static bool  hasPrinted;
+using StreamCompaction::Common::PerformanceTimer;
+
+#define Timer 0;
+PerformanceTimer& timer()
+{
+    static PerformanceTimer timer;
+    return timer;
+}
 
 void FilterCreation(int filter_size, float *kernel)
 {
@@ -188,6 +201,16 @@ void runCuda() {
 
     if (iteration < ui_iterations) {
         iteration++;
+
+#if Timer
+        // Start Timer
+        if (iteration == 1)
+        {
+            timePT = 0.f;
+        }
+        timer().startCpuTimer();
+#endif // TIMER
+
 
         // execute the kernel
         int frame = 0;

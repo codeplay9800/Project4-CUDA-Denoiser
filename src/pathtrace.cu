@@ -828,7 +828,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 			checkCUDAError("trace one bounce");
 			cudaDeviceSynchronize();
 
-			if (depth == 0 && iter ==1) {
+			if (depth == 0) {
 				generateGBufferOptimised << <numblocksPathSegmentTracing, blockSize1d >> > (num_paths, dev_intersections, dev_paths, dev_gBuffer);
 			}
 
@@ -867,9 +867,9 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 		// CHECKITOUT: process the gbuffer results and send them to OpenGL buffer for visualization
 		//gbufferToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
-		gbufferToPBO_Normals_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
+		//gbufferToPBO_Normals_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
 		//gbufferToPBO_Position <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer);
-		//gbufferToPBO_Position_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer, dev_Camera);
+		gbufferToPBO_Position_Optimised <<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, dev_gBuffer, dev_Camera);
 	}
 
 	__global__ void GeneratePingPongImage(int pixelCount, glm::vec3* devImage, glm::vec3* pingPongImage, int iter)
