@@ -57,8 +57,12 @@ All the Images Use The Following Parameters
 ### Denoiser vs Resolution
 ![Performance  Analysis](img/Outputs/DenoiseTimevsResolution.png)
 
+This demonstrates that the average time increases linearly with the number of pixels in the image. 
+
 ### Denoiser vs Filter Size
 ![Performance  Analysis](img/Outputs/DenoiseTimevsFilterSize.png)
+
+The À-Trous filter scales in power of 2 which aligns with the demonstration of this graph curve which behaves as a logarithmic curve. 
 
 ### Notable Findings
 - How visual results vary with filter size.
@@ -95,6 +99,9 @@ Denoiser	9.5657ms	9.7115ms	9.7557ms	9.7799ms<br/>
 
 - Simple Gussian Blur 
 ![Performance  Analysis](img/Outputs/Gaussian.PNG)
+
+
+As we can see the A-tours filter does a much better job in preserving the edges which almost seem too fade in simple Gaussian Blur. 
 
 | Filter Size | A Trous   |  Simple Gaussian | 
 |---|---|---|
