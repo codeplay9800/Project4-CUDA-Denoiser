@@ -34,7 +34,7 @@ All the Images Use The Following Parameters
 - Position Weight = 0.700
 
 ## Reference Image (1000 Iterations) 
-
+ 
 ##10 Iterations 
 - Reference
 ![Performance  Analysis](img/Outputs/10iter.PNG)
@@ -79,10 +79,10 @@ All the Images Use The Following Parameters
 ### Comparing A-trous and Gaussian filtering
 
 - A-trous
-![Performance  Analysis](img/Outputs/denoised.png)
+![Performance  Analysis](img/Outputs/denoised.PNG)
 
 - Simple Gussian Blur 
-![Performance  Analysis](img/Outputs/Gaussian.png)
+![Performance  Analysis](img/Outputs/Gaussian.PNG)
 
 | Filter Size | A Trous   |  Simple Gaussian | 
 |---|---|---|
